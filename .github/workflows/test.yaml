@@ -3,7 +3,7 @@ name: Test xk6-kafka
 on:
   push:
     branches:
-      - main
+      - k6-v2
     tags:
       - v*
   pull_request:
