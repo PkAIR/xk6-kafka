@@ -14,7 +14,7 @@ import (
 	"github.com/riferrei/srclient"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/sirupsen/logrus"
-	"go.k6.io/k6/js/common"
+	"go.k6.io/k6/v2/js/common"
 )
 
 type Element string

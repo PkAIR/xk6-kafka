@@ -1,4 +1,31 @@
-# <img src="https://github.com/mostafa/xk6-kafka/blob/main/assets/xk6-kafka-logo.png" alt="xk6-kafka logo" style="height: 32px; width:32px;"/> xk6-kafka
+# xk6-kafka (fork for k6 v2)
+
+> **Fork notice.** This is a fork of [mostafa/xk6-kafka](https://github.com/mostafa/xk6-kafka),
+> branched from tag `v1.3.0` — the last release built on `segmentio/kafka-go`, which is pure Go.
+>
+> **Why this fork exists.** Upstream `v2.0.0` switched to `confluentinc/confluent-kafka-go`, a cgo
+> wrapper around librdkafka, for higher producer throughput. That makes `CGO_ENABLED=1` and a C
+> toolchain mandatory, and it makes cross-compilation impossible: `k6foundry` disables cgo for any
+> target platform that differs from the host, so `xk6 build` inside a Linux container can no longer
+> produce a macOS binary. Reading a handful of messages and asserting on them — the use case this fork
+> serves — does not need that throughput.
+>
+> **Changes against `v1.3.0`:**
+> - import paths moved from `go.k6.io/k6/...` to `go.k6.io/k6/v2/...`
+> - `go.mod`: requires `go.k6.io/k6/v2 v2.2.0`, module path is `github.com/PkAIR/xk6-kafka`
+>
+> No functional code was changed. `go build ./...`, `go vet ./...` and the upstream test suite pass
+> against a local broker (`lensesio/fast-data-dev:3.9.0`).
+>
+> **Usage:**
+> ```
+> xk6 build v2.2.0 --with github.com/PkAIR/xk6-kafka@v1.4.0
+> ```
+>
+> Licensed under Apache-2.0, same as upstream. Consider using upstream directly if you need its v2
+> features (Kerberos, Azure/GCP OAuth, higher throughput) and can live with cgo.
+
+---
 
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mostafa/xk6-kafka/test.yaml?branch=main&logo=github)](https://github.com/mostafa/xk6-kafka/actions) [![Docker Pulls](https://img.shields.io/docker/pulls/mostafamoradian/xk6-kafka?logo=docker)](https://hub.docker.com/r/mostafamoradian/xk6-kafka) [![Coverage Status](https://coveralls.io/repos/github/mostafa/xk6-kafka/badge.svg?branch=main)](https://coveralls.io/github/mostafa/xk6-kafka?branch=main) [![Go Reference](https://pkg.go.dev/badge/github.com/mostafa/xk6-kafka.svg)](https://pkg.go.dev/github.com/mostafa/xk6-kafka)
 
