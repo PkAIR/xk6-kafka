@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.3
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/grafana/sobek v0.0.0-20260727154728-7781506a890f
-	github.com/hamba/avro/v2 v2.30.0
+	github.com/hamba/avro/v2 v2.31.0
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/riferrei/srclient v0.7.3
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
