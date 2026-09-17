@@ -68,6 +68,7 @@ const (
 	failedCreateTopic    errCode = 6001
 	failedDeleteTopic    errCode = 6002
 	failedReadPartitions errCode = 6003
+	failedReadOffsets    errCode = 6004
 )
 
 var (

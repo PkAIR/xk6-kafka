@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	"github.com/grafana/sobek"
@@ -259,22 +258,21 @@ func (k *Kafka) reader(readerConfig *ReaderConfig) *kafkago.Reader {
 		if predefinedOffset, exists := StartOffsets[readerConfig.StartOffset]; exists {
 			startOffset = predefinedOffset
 		} else {
-			// Attempt to parse StartOffset as an integer
-			parsedOffset, err := strconv.ParseInt(readerConfig.StartOffset, 10, 64)
-			if err != nil {
-				wrappedError := NewXk6KafkaError(
-					failedParseStartOffset,
-					"Failed to parse StartOffset, defaulting to FirstOffset", err)
-				// Log the error and default to FirstOffset
-				logger.WithFields(logrus.Fields{
-					"error":        err,
-					"start_offset": readerConfig.StartOffset,
-				}).Warn(wrappedError)
-				startOffset = StartOffsets[firstOffset]
-			} else {
-				// Use the parsed offset if valid
-				startOffset = parsedOffset
-			}
+			/*
+			 * A group reader may only start at either end of the log: kafka-go panics on any other
+			 * StartOffset while GroupID is set, and that panic ends the whole test run. Report it
+			 * instead, and name the combination that does work.
+			 */
+			wrappedError := NewXk6KafkaError(
+				failedParseStartOffset,
+				"StartOffset of a reader with a groupId must be "+firstOffset+" or "+lastOffset+
+					". To start at a given offset, drop groupId and set topic, partition and offset.", nil)
+			logger.WithFields(logrus.Fields{
+				"error":        wrappedError,
+				"start_offset": readerConfig.StartOffset,
+			}).Error(wrappedError)
+			common.Throw(k.vu.Runtime(), wrappedError)
+			return nil
 		}
 	}
 

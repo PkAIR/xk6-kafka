@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/grafana/sobek"
 	kafkago "github.com/segmentio/kafka-go"
@@ -86,6 +87,27 @@ func (k *Kafka) connectionClass(call sobek.ConstructorCall) *sobek.Object {
 	err = connectionObject.Set("listTopics", func(_ sobek.FunctionCall) sobek.Value {
 		topics := k.listTopics(connection)
 		return runtime.ToValue(topics)
+	})
+	if err != nil {
+		common.Throw(runtime, err)
+	}
+
+	// partitionOffsets(topic[, sinceMillis]) reports the bounds of every partition of a topic, and the
+	// offset a timestamp maps to. A reader without a consumer group can then start at a known offset,
+	// which is the only way to read a past window: a group reader may only start at either end of the log.
+	err = connectionObject.Set("partitionOffsets", func(call sobek.FunctionCall) sobek.Value {
+		if len(call.Arguments) == 0 {
+			common.Throw(runtime, ErrNotEnoughArguments)
+		}
+
+		var since *time.Time
+		if len(call.Arguments) > 1 && !sobek.IsUndefined(call.Argument(1)) {
+			at := time.UnixMilli(call.Argument(1).ToInteger())
+			since = &at
+		}
+
+		offsets := k.partitionOffsets(connectionConfig, connection, call.Argument(0).String(), since)
+		return runtime.ToValue(offsets)
 	})
 	if err != nil {
 		common.Throw(runtime, err)
@@ -184,6 +206,87 @@ func (k *Kafka) deleteTopic(conn *kafkago.Conn, topic string) {
 		logger.WithField("error", wrappedError).Error(wrappedError)
 		common.Throw(k.vu.Runtime(), wrappedError)
 	}
+}
+
+// partitionOffsets reads the first and the last offset of every partition of the topic, plus the offset
+// of the first record stored at or after `since` when one is given. Offsets live on the leader of each
+// partition, so it dials the leaders rather than reusing the controller connection.
+func (k *Kafka) partitionOffsets(
+	connectionConfig *ConnectionConfig, conn *kafkago.Conn, topic string, since *time.Time,
+) []map[string]any {
+	partitions, err := conn.ReadPartitions(topic)
+	if err != nil {
+		wrappedError := NewXk6KafkaError(failedReadPartitions, "Failed to read partitions.", err)
+		logger.WithField("error", wrappedError).Error(wrappedError)
+		common.Throw(k.vu.Runtime(), wrappedError)
+		return nil
+	}
+
+	dialer, wrappedError := GetDialer(connectionConfig.SASL, connectionConfig.TLS)
+	if wrappedError != nil {
+		logger.WithField("error", wrappedError).Error(wrappedError)
+		common.Throw(k.vu.Runtime(), wrappedError)
+		return nil
+	}
+
+	ctx := k.vu.Context()
+	if ctx == nil {
+		err := NewXk6KafkaError(noContextError, "No context.", nil)
+		logger.WithField("error", err).Info(err)
+		common.Throw(k.vu.Runtime(), err)
+		return nil
+	}
+
+	offsets := make([]map[string]any, 0, len(partitions))
+	for _, partition := range partitions {
+		leader, err := dialer.DialLeader(ctx, "tcp", connectionConfig.Address, topic, partition.ID)
+		if err != nil {
+			wrappedError := NewXk6KafkaError(failedReadOffsets, "Failed to dial partition leader.", err)
+			logger.WithField("error", wrappedError).Error(wrappedError)
+			common.Throw(k.vu.Runtime(), wrappedError)
+			return nil
+		}
+
+		first, last, err := leader.ReadOffsets()
+		if err != nil {
+			_ = leader.Close()
+			wrappedError := NewXk6KafkaError(failedReadOffsets, "Failed to read offsets.", err)
+			logger.WithField("error", wrappedError).Error(wrappedError)
+			common.Throw(k.vu.Runtime(), wrappedError)
+			return nil
+		}
+
+		offset := map[string]any{
+			"partition":   partition.ID,
+			"firstOffset": first,
+			"lastOffset":  last,
+		}
+
+		if since != nil {
+			at, err := leader.ReadOffset(*since)
+			if err != nil {
+				_ = leader.Close()
+				wrappedError := NewXk6KafkaError(failedReadOffsets, "Failed to read offset at time.", err)
+				logger.WithField("error", wrappedError).Error(wrappedError)
+				common.Throw(k.vu.Runtime(), wrappedError)
+				return nil
+			}
+			/*
+			 * Kafka answers -1 when no record is stored at or after the timestamp. Reported as the end of
+			 * the log, so that offsetAt always names a readable start and an empty window reads nothing:
+			 * a caller passing -1 to a reader gets the whole partition instead.
+			 */
+			if at < first {
+				at = last
+			}
+			offset["offsetAt"] = at
+		}
+
+		_ = leader.Close()
+		offsets = append(offsets, offset)
+	}
+
+	return offsets
 }
 
 // listTopics lists the topics from the given address. It will also try to
